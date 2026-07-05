@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "cron:grid": "tsx scripts/cron-grid.ts",
+    "seed:grid": "tsx scripts/seed-grid.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
