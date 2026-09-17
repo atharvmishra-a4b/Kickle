@@ -29,6 +29,18 @@ export async function GET(request: NextRequest) {
       include: {
         cells: {
           orderBy: [{ row: "asc" }, { col: "asc" }],
+          // Sample answers are server-only validation hints. Never expose them
+          // before a player submits their grid.
+          select: {
+            id: true,
+            gridId: true,
+            row: true,
+            col: true,
+            rowType: true,
+            rowValue: true,
+            colType: true,
+            colValue: true,
+          },
         },
       },
     });
@@ -51,7 +63,18 @@ export async function GET(request: NextRequest) {
       include: {
         answers: {
           include: {
-            cell: true,
+            cell: {
+              select: {
+                id: true,
+                gridId: true,
+                row: true,
+                col: true,
+                rowType: true,
+                rowValue: true,
+                colType: true,
+                colValue: true,
+              },
+            },
           },
         },
       },

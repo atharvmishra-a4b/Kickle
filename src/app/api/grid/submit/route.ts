@@ -19,15 +19,20 @@ export async function POST(request: NextRequest) {
     const body: SubmitGridRequest & { timeTakenSeconds?: number } = await request.json();
     const { gridId, answers, timeTakenSeconds } = body;
 
-    if (!gridId || !answers || answers.length !== 9) {
+    if (!gridId || !Array.isArray(answers) || answers.length !== 9) {
       return NextResponse.json(
         { error: "Invalid submission: must include gridId and 9 answers" },
         { status: 400 }
       );
     }
 
-    const grid = await prisma.grid.findUnique({
-      where: { id: gridId },
+    // A submission is only valid for the active grid that is currently shown
+    // to the player. This prevents scoring historical or disabled grids.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const grid = await prisma.grid.findFirst({
+      where: { id: gridId, isActive: true, date: today },
       include: { 
         cells: {
           select: {
@@ -45,7 +50,31 @@ export async function POST(request: NextRequest) {
     });
 
     if (!grid) {
-      return NextResponse.json({ error: "Grid not found" }, { status: 404 });
+      return NextResponse.json({ error: "Active grid not found" }, { status: 404 });
+    }
+
+    // Require exactly one answer for every cell in this grid. Without this,
+    // callers could repeat a single correct cell ID to inflate their score.
+    const hasValidAnswerShape = answers.every(
+      (answer) =>
+        !!answer &&
+        typeof answer.cellId === "string" &&
+        typeof answer.playerName === "string"
+    );
+    const submittedCellIds = new Set(answers.map((answer) => answer?.cellId));
+    const gridCellIds = new Set(grid.cells.map((cell) => cell.id));
+    const hasExactCellSet =
+      hasValidAnswerShape &&
+      submittedCellIds.size === gridCellIds.size &&
+      [...submittedCellIds].every(
+        (cellId) => typeof cellId === "string" && gridCellIds.has(cellId)
+      );
+
+    if (!hasExactCellSet) {
+      return NextResponse.json(
+        { error: "Invalid submission: include one answer for each grid cell" },
+        { status: 400 }
+      );
     }
 
     const existingSubmission = await prisma.gridSubmission.findUnique({
@@ -114,12 +143,15 @@ export async function POST(request: NextRequest) {
         gridId: grid.id,
         score,
         timeTakenSeconds:
-          timeTakenSeconds && timeTakenSeconds < 7200 ? timeTakenSeconds : null,
+          typeof timeTakenSeconds === "number" &&
+          Number.isFinite(timeTakenSeconds) &&
+          timeTakenSeconds >= 0 &&
+          timeTakenSeconds < 7200
+            ? timeTakenSeconds
+            : null,
         answers: { create: evaluations },
       },
-      include: {
-        answers: { include: { cell: true } },
-      },
+      include: { answers: true },
     });
 
     return NextResponse.json({

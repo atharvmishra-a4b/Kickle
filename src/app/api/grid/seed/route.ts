@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateDailyGrid, getNextGridNumber } from "@/lib/grid/generator";
+import { auth } from "@/lib/auth";
+
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 
 export async function POST(request: NextRequest) {
   try {
-    // Simple security: check for a secret key
-    const authHeader = request.headers.get("authorization");
-    const adminSecret = process.env.ADMIN_SECRET || "change-me-in-production";
+    const session = await auth.api.getSession({ headers: request.headers });
 
-    if (authHeader !== `Bearer ${adminSecret}`) {
+    if (!session?.user || !ADMIN_EMAIL || session.user.email !== ADMIN_EMAIL) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
+        { error: "Forbidden" },
+        { status: 403 }
       );
     }
 
